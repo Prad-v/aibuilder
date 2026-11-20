@@ -2141,9 +2141,11 @@ describe("IssueDetail", () => {
     expect(ensureIssue).not.toHaveBeenCalled();
     expect(mockIssuesApi.markRead).not.toHaveBeenCalled();
     const props = mockIssueChatThreadRender.mock.calls.at(-1)?.[0] as {
+      composerDisabledReason: string | null;
       onAdd: (body: string) => Promise<void>;
       onAttachImage: (file: File) => Promise<IssueAttachment>;
     };
+    expect(props.composerDisabledReason).toBeNull();
     if (kind !== "attachment") {
       await act(async () => { await props.onAdd("Clarify this goal"); });
       expect(mockIssuesApi.addComment).toHaveBeenCalledWith(canonical.id, "Clarify this goal", undefined, undefined, undefined, expect.any(String));
@@ -2156,6 +2158,19 @@ describe("IssueDetail", () => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.issues.detail(canonical.id) });
     }
     expect(ensureIssue).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the first agent-chat composer only when agent chat is explicitly off", async () => {
+    mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableAgentChat: false });
+    const agent = createAgent();
+    const canonical = createIssue({ conversationAgentId: agent.id, conversationUserId: "user-1", conversationState: "waiting", status: "in_review" });
+    const ensureIssue = vi.fn().mockResolvedValue(canonical);
+    await act(async () => {
+      renderIssueView(<TaskDetailSurface conversation={{ agent, issue: null, ensureIssue }} />);
+    });
+    await flushReact();
+    const props = mockIssueChatThreadRender.mock.calls.at(-1)?.[0] as { composerDisabledReason: string | null };
+    expect(props.composerDisabledReason).toBe("Agent Chat is disabled in Experimental settings.");
   });
 
   it("retries the chosen initial chat mode after creation succeeded but mode persistence failed", async () => {
